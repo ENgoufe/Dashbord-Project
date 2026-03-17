@@ -1,0 +1,70 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>{{ page_title }}</title>
+    <link rel="stylesheet" href="{% static 'operations/api-browser.css' %}">
+</head>
+<body
+    data-api-browser
+    data-api-url="{{ api_url }}"
+    data-filter-name="{{ filter_name }}"
+    data-columns="delivery_number,product_sku,product_name,quantity,expected_date,supplier,status"
+    data-sort-types="text,text,text,number,date,text,text"
+>
+    <main class="api-shell">
+        <section class="hero-panel">
+            <h1>{{ page_title }}</h1>
+            <p class="lead">
+                Diese Ansicht laedt Lieferdaten direkt aus der JSON-API und praesentiert
+                sie in einer eigenen Seite statt im Dashboard.
+            </p>
+            <a class="ghost-link" href="{% url 'dashboard' %}">Zum Dashboard</a>
+        </section>
+
+        <section class="data-panel">
+            <form class="filter-form" data-filter-form>
+                <label for="api-filter">{{ filter_label }}</label>
+                <div class="filter-row">
+                    <input id="api-filter" name="{{ filter_name }}" type="text" placeholder="{{ filter_placeholder }}">
+                    <button type="submit">Daten laden</button>
+                </div>
+            </form>
+
+            <div class="meta-bar">
+                <span data-result-count>0 Eintraege</span>
+                <code>{{ api_url }}</code>
+            </div>
+
+            <div class="table-toolbar">
+                <input type="text" placeholder="Tabelle filtern" data-search-input>
+                <button type="button" class="secondary-button" data-reset-table>Filter zuruecksetzen</button>
+            </div>
+
+            <div class="table-wrap">
+                <table>
+                    <thead>
+                        <tr>
+                            <th><button type="button" class="sort-button" data-sort-key="delivery_number">Lieferung <span class="sort-indicator">↕</span></button></th>
+                            <th><button type="button" class="sort-button" data-sort-key="product_sku">Produkt-SKU <span class="sort-indicator">↕</span></button></th>
+                            <th><button type="button" class="sort-button" data-sort-key="product_name">Produkt <span class="sort-indicator">↕</span></button></th>
+                            <th><button type="button" class="sort-button" data-sort-key="quantity">Menge <span class="sort-indicator">↕</span></button></th>
+                            <th><button type="button" class="sort-button" data-sort-key="expected_date">Lieferdatum <span class="sort-indicator">↕</span></button></th>
+                            <th><button type="button" class="sort-button" data-sort-key="supplier">Lieferant <span class="sort-indicator">↕</span></button></th>
+                            <th><button type="button" class="sort-button" data-sort-key="status">Status <span class="sort-indicator">↕</span></button></th>
+                        </tr>
+                    </thead>
+                    <tbody data-results-body></tbody>
+                </table>
+            </div>
+
+            <div class="empty-state" data-empty-state>Keine Daten geladen.</div>
+            <div class="error-state" data-error-state hidden></div>
+        </section>
+    </main>
+
+    <script src="{% static 'operations/api-browser.js' %}"></script>
+</body>
+</html>

@@ -1,0 +1,506 @@
+{% load static %}
+<!DOCTYPE html>
+<html lang="de">
+<head>
+    <meta charset="UTF-8">
+    <title>Platform Dashboard</title>
+    <link rel="stylesheet" href="{% static 'operations/dashboard.css' %}">
+</head>
+<body>
+    <div class="container">
+        <div class="page-header">
+            <h1>Platform Dashboard</h1>
+            <nav class="page-menu">
+                <details class="menu-dropdown">
+                    <summary class="menu-trigger">
+                        <span class="menu-icon">&#9776;</span>
+                    </summary>
+                    <div class="menu-list">
+                        <a href="{% url 'inventory_frontend' %}">Bestände</a>
+                        <a href="{% url 'orders_frontend' %}">Aufträge</a>
+                        <a href="{% url 'deliveries_frontend' %}">Lieferungen</a>
+                    </div>
+                </details>
+            </nav>
+        </div>
+        <div class="subtitle">Stand: {{ today }}</div>
+
+        {% if messages %}
+            <div class="message-list">
+                {% for message in messages %}
+                    <div class="message {{ message.tags }}">{{ message }}</div>
+                {% endfor %}
+            </div>
+        {% endif %}
+
+        <div class="upload-grid">
+            <div class="card upload-card">
+                <h3>Bestände importieren</h3>
+                <p>Datei auswählen und direkt in Produkte, Bestände sowie optionale Schwellenwerte übernehmen.</p>
+                <form method="post" enctype="multipart/form-data" class="upload-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="import_target" value="inventory">
+                    <input type="hidden" name="selected_location" value="{{ selected_location }}">
+                    <input type="file" name="data_file" accept=".csv,.xlsx" required>
+                    <button type="submit" class="button">Bestandsdatei importieren</button>
+                </form>
+            </div>
+            <div class="card upload-card">
+                <h3>Aufträge importieren</h3>
+                <p>Produktionsaufträge aus CSV oder Excel laden und aktualisieren.</p>
+                <form method="post" enctype="multipart/form-data" class="upload-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="import_target" value="orders">
+                    <input type="hidden" name="selected_location" value="{{ selected_location }}">
+                    <input type="file" name="data_file" accept=".csv,.xlsx" required>
+                    <button type="submit" class="button">Auftragsdatei importieren</button>
+                </form>
+            </div>
+            <div class="card upload-card">
+                <h3>Lieferungen importieren</h3>
+                <p>Lieferdaten als JSON, CSV oder Excel direkt in die Lieferübersicht übernehmen.</p>
+                <form method="post" enctype="multipart/form-data" class="upload-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="import_target" value="deliveries">
+                    <input type="hidden" name="selected_location" value="{{ selected_location }}">
+                    <input type="file" name="data_file" accept=".json,.csv,.xlsx" required>
+                    <button type="submit" class="button">Lieferdatei importieren</button>
+                </form>
+            </div>
+        </div>
+
+        <form method="get" class="filter-bar">
+            <div class="filter-field">
+                <label for="location">Standortfilter</label>
+                <select name="location" id="location">
+                    <option value="">Alle Standorte</option>
+                    {% for location in available_locations %}
+                        <option value="{{ location }}" {% if location == selected_location %}selected{% endif %}>
+                            {{ location }}
+                        </option>
+                    {% endfor %}
+                </select>
+            </div>
+            <div class="filter-actions">
+                <button type="submit" class="button">Filtern</button>
+                <a href="?" class="button button-secondary">Zurücksetzen</a>
+            </div>
+        </form>
+
+        {% if selected_location %}
+            <div class="subtitle">Aktiver Standortfilter: {{ selected_location }}</div>
+        {% endif %}
+
+        <div class="llm-grid">
+            <div class="card">
+                <h2>Supply Copilot</h2>
+                <div class="table-caption">Stelle Fragen zu Engpaessen, Bestandswarnungen oder Lieferungen.</div>
+                <form method="post" class="llm-form">
+                    {% csrf_token %}
+                    <input type="hidden" name="action" value="ask_llm">
+                    <input type="hidden" name="selected_location" value="{{ selected_location }}">
+                    <select name="llm_provider">
+                        {% for provider in llm_providers %}
+                            <option value="{{ provider.value }}" {% if provider.value == llm_provider %}selected{% endif %}>
+                                {{ provider.label }}
+                            </option>
+                        {% endfor %}
+                    </select>
+                    <textarea name="llm_question" placeholder="Beispiel: Welche Risiken sind in den naechsten 7 Tagen am wichtigsten?">{{ llm_question }}</textarea>
+                    <button type="submit" class="button">Frage analysieren</button>
+                </form>
+            </div>
+            <div class="card">
+                <h2>Antwort</h2>
+                {% if llm_model %}
+                    <div class="llm-meta">Provider: {{ llm_provider }} | Modell: {{ llm_model }}</div>
+                {% endif %}
+                {% if llm_answer %}
+                    <div class="llm-answer">{{ llm_answer }}</div>
+                {% elif llm_error %}
+                    <div class="message error">{{ llm_error }}</div>
+                {% else %}
+                    <div class="empty-box">Noch keine Analyse angefordert.</div>
+                {% endif %}
+            </div>
+        </div>
+
+        <div class="kpi-grid">
+            <div class="card">
+                <div>Produkte</div>
+                <div class="kpi-value">{{ total_products }}</div>
+            </div>
+            <div class="card">
+                <div>Bestandsdatensaetze</div>
+                <div class="kpi-value">{{ total_inventory_records }}</div>
+            </div>
+            <div class="card">
+                <div>Offene Auftraege</div>
+                <div class="kpi-value">{{ open_orders_count }}</div>
+            </div>
+            <div class="card">
+                <div>Verspaetete Lieferungen</div>
+                <div class="kpi-value">{{ delayed_deliveries_count }}</div>
+            </div>
+            <div class="card">
+                <div>Unter Sicherheitsbestand</div>
+                <div class="kpi-value">{{ below_safety_stock_count }}</div>
+            </div>
+            <div class="card">
+                <div>Unter Meldebestand</div>
+                <div class="kpi-value">{{ below_reorder_point_count }}</div>
+            </div>
+        </div>
+
+        <div class="section">
+            <h2>Bestandswarnungen</h2>
+            {% if stock_alerts %}
+                <div class="table-controls">
+                    <div class="table-caption">Produkte unter Sicherheits- oder Meldebestand.</div>
+                    <button type="button" class="table-reset" data-reset-table="stock-alerts-table">Filter zuruecksetzen</button>
+                </div>
+                <table data-interactive-table id="stock-alerts-table">
+                    <thead>
+                        <tr>
+                            <th data-sort-type="text"><button type="button" class="sort-button">SKU <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Produkt <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="number"><button type="button" class="sort-button">Aktueller Bestand <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="number"><button type="button" class="sort-button">Sicherheitsbestand <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="number"><button type="button" class="sort-button">Meldebestand <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Warnstufe <span class="sort-indicator">&#8597;</span></button></th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="column-filter" placeholder="SKU filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Produkt filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Bestand filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Sicherheitsbestand filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Meldebestand filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Warnstufe filtern"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for alert in stock_alerts %}
+                            <tr>
+                                <td data-sort-value="{{ alert.product.sku }}">{{ alert.product.sku }}</td>
+                                <td data-sort-value="{{ alert.product.name }}">{{ alert.product.name }}</td>
+                                <td data-sort-value="{{ alert.current_stock }}">{{ alert.current_stock }}</td>
+                                <td data-sort-value="{{ alert.safety_stock }}">{{ alert.safety_stock }}</td>
+                                <td data-sort-value="{{ alert.reorder_point }}">{{ alert.reorder_point }}</td>
+                                <td data-sort-value="{{ alert.alert_level }}">
+                                    {% if alert.alert_level == "critical" %}
+                                        <span class="badge badge-critical">kritisch</span>
+                                    {% else %}
+                                        <span class="badge badge-progress">Warnung</span>
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <div>Seite {{ stock_alerts.number }} von {{ stock_alerts.paginator.num_pages }}</div>
+                    <div class="pagination-links">
+                        {% if stock_alerts.has_previous %}
+                            <a class="pagination-link" href="?stock_alerts_page={{ stock_alerts.previous_page_number }}{{ stock_alerts_page_query }}">Zurueck</a>
+                        {% endif %}
+                        <span class="pagination-link current">{{ stock_alerts.number }}</span>
+                        {% if stock_alerts.has_next %}
+                            <a class="pagination-link" href="?stock_alerts_page={{ stock_alerts.next_page_number }}{{ stock_alerts_page_query }}">Weiter</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty-box">Aktuell keine Produkte unter Sicherheits- oder Meldebestand.</div>
+            {% endif %}
+        </div>
+
+        <div class="section">
+            <h2>Kritische Materialien</h2>
+            {% if shortage_summary %}
+                <div class="table-controls">
+                    <div class="table-caption">Spaltenweise filtern und per Klick auf die Überschrift sortieren.</div>
+                    <button type="button" class="table-reset" data-reset-table="critical-materials-table">Filter zurücksetzen</button>
+                </div>
+                <table data-interactive-table id="critical-materials-table">
+                    <thead>
+                        <tr>
+                            <th data-sort-type="text"><button type="button" class="sort-button">SKU <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Material <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="number"><button type="button" class="sort-button">Gesamter Fehlbestand <span class="sort-indicator">&#8597;</span></button></th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="column-filter" placeholder="SKU filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Material filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Fehlbestand filtern"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for item in shortage_summary %}
+                            <tr>
+                                <td data-sort-value="{{ item.component_sku }}">{{ item.component_sku }}</td>
+                                <td data-sort-value="{{ item.component_name }}">{{ item.component_name }}</td>
+                                <td data-sort-value="{{ item.total_shortage }}">{{ item.total_shortage }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <div>Seite {{ shortage_summary.number }} von {{ shortage_summary.paginator.num_pages }}</div>
+                    <div class="pagination-links">
+                        {% if shortage_summary.has_previous %}
+                            <a class="pagination-link" href="?shortages_page={{ shortage_summary.previous_page_number }}{{ shortages_page_query }}">Zurück</a>
+                        {% endif %}
+                        <span class="pagination-link current">{{ shortage_summary.number }}</span>
+                        {% if shortage_summary.has_next %}
+                            <a class="pagination-link" href="?shortages_page={{ shortage_summary.next_page_number }}{{ shortages_page_query }}">Weiter</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty-box">Aktuell keine kritischen Materialien.</div>
+            {% endif %}
+        </div>
+
+        <div class="section">
+            <h2>Offene Produktionsaufträge</h2>
+            {% if orders %}
+                <div class="table-controls">
+                    <div class="table-caption"></div>
+                    <button type="button" class="table-reset" data-reset-table="orders-table">Filter zurücksetzen</button>
+                </div>
+                <table data-interactive-table id="orders-table">
+                    <thead>
+                        <tr>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Auftrag <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Produkt <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="number"><button type="button" class="sort-button">Menge <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="date"><button type="button" class="sort-button">Fällig <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Status <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Machbarkeit <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Kritische Komponenten <span class="sort-indicator">&#8597;</span></button></th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="column-filter" placeholder="Auftrag filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Produkt filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Menge filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Datum filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Status filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Machbarkeit filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Komponenten filtern"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for order in orders %}
+                            <tr>
+                                <td data-sort-value="{{ order.order_number }}">{{ order.order_number }}</td>
+                                <td data-sort-value="{{ order.product_sku }} {{ order.product_name }}">{{ order.product_sku }} - {{ order.product_name }}</td>
+                                <td data-sort-value="{{ order.quantity }}">{{ order.quantity }}</td>
+                                <td data-sort-value="{{ order.due_date|date:'Y-m-d' }}">{{ order.due_date }}</td>
+                                <td data-sort-value="{{ order.status }}">
+                                    {% if order.status == "planned" %}
+                                        <span class="badge badge-planned">planned</span>
+                                    {% elif order.status == "in_progress" %}
+                                        <span class="badge badge-progress">in progress</span>
+                                    {% else %}
+                                        <span class="badge badge-completed">completed</span>
+                                    {% endif %}
+                                </td>
+                                <td data-sort-value="{% if order.has_shortage %}kritisch{% else %}machbar{% endif %}">
+                                    {% if order.has_shortage %}
+                                        <span class="badge badge-critical">kritisch</span>
+                                    {% else %}
+                                        <span class="badge badge-ok">machbar</span>
+                                    {% endif %}
+                                </td>
+                                <td>
+                                    {% if order.critical_components %}
+                                        <ul class="small-list">
+                                            {% for component in order.critical_components %}
+                                                <li>
+                                                    {{ component.component_sku }} - {{ component.component_name }}:
+                                                    Bedarf {{ component.required_quantity }},
+                                                    Bestand {{ component.available_quantity }},
+                                                    Zugang {{ component.incoming_quantity }},
+                                                    Fehlmenge {{ component.shortage }}
+                                                </li>
+                                            {% endfor %}
+                                        </ul>
+                                    {% else %}
+                                        Keine
+                                    {% endif %}
+                                </td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <div>Seite {{ orders.number }} von {{ orders.paginator.num_pages }}</div>
+                    <div class="pagination-links">
+                        {% if orders.has_previous %}
+                            <a class="pagination-link" href="?orders_page={{ orders.previous_page_number }}{{ orders_page_query }}">Zurück</a>
+                        {% endif %}
+                        <span class="pagination-link current">{{ orders.number }}</span>
+                        {% if orders.has_next %}
+                            <a class="pagination-link" href="?orders_page={{ orders.next_page_number }}{{ orders_page_query }}">Weiter</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty-box">Keine offenen Produktionsaufträge vorhanden.</div>
+            {% endif %}
+        </div>
+
+        <div class="section">
+            <h2>Anstehende Lieferungen</h2>
+            {% if upcoming_deliveries %}
+                <div class="table-controls">
+                    <div class="table-caption"></div>
+                    <button type="button" class="table-reset" data-reset-table="deliveries-table">Filter zurücksetzen</button>
+                </div>
+                <table data-interactive-table id="deliveries-table">
+                    <thead>
+                        <tr>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Lieferung <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Produkt <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="number"><button type="button" class="sort-button">Menge <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="date"><button type="button" class="sort-button">Datum <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Lieferant <span class="sort-indicator">&#8597;</span></button></th>
+                            <th data-sort-type="text"><button type="button" class="sort-button">Status <span class="sort-indicator">&#8597;</span></button></th>
+                        </tr>
+                        <tr class="filter-row">
+                            <th><input type="text" class="column-filter" placeholder="Lieferung filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Produkt filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Menge filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Datum filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Lieferant filtern"></th>
+                            <th><input type="text" class="column-filter" placeholder="Status filtern"></th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {% for delivery in upcoming_deliveries %}
+                            <tr>
+                                <td data-sort-value="{{ delivery.delivery_number }}">{{ delivery.delivery_number }}</td>
+                                <td data-sort-value="{{ delivery.product.sku }} {{ delivery.product.name }}">{{ delivery.product.sku }} - {{ delivery.product.name }}</td>
+                                <td data-sort-value="{{ delivery.quantity }}">{{ delivery.quantity }}</td>
+                                <td data-sort-value="{{ delivery.expected_date|date:'Y-m-d' }}">{{ delivery.expected_date }}</td>
+                                <td data-sort-value="{{ delivery.supplier }}">{{ delivery.supplier }}</td>
+                                <td data-sort-value="{{ delivery.status }}">{{ delivery.status }}</td>
+                            </tr>
+                        {% endfor %}
+                    </tbody>
+                </table>
+                <div class="pagination">
+                    <div>Seite {{ upcoming_deliveries.number }} von {{ upcoming_deliveries.paginator.num_pages }}</div>
+                    <div class="pagination-links">
+                        {% if upcoming_deliveries.has_previous %}
+                            <a class="pagination-link" href="?deliveries_page={{ upcoming_deliveries.previous_page_number }}{{ deliveries_page_query }}">Zurück</a>
+                        {% endif %}
+                        <span class="pagination-link current">{{ upcoming_deliveries.number }}</span>
+                        {% if upcoming_deliveries.has_next %}
+                            <a class="pagination-link" href="?deliveries_page={{ upcoming_deliveries.next_page_number }}{{ deliveries_page_query }}">Weiter</a>
+                        {% endif %}
+                    </div>
+                </div>
+            {% else %}
+                <div class="empty-box">Keine anstehenden Lieferungen in den nächsten 7 Tagen.</div>
+            {% endif %}
+        </div>
+    </div>
+    <script>
+        document.addEventListener("DOMContentLoaded", function () {
+            function getCellValue(row, index) {
+                const cell = row.children[index];
+                if (!cell) {
+                    return "";
+                }
+                return (cell.dataset.sortValue || cell.textContent || "").trim();
+            }
+
+            function parseValue(value, type) {
+                if (type === "number") {
+                    const numeric = Number(String(value).replace(",", "."));
+                    return Number.isNaN(numeric) ? Number.NEGATIVE_INFINITY : numeric;
+                }
+                if (type === "date") {
+                    return Date.parse(value) || 0;
+                }
+                return String(value).toLowerCase();
+            }
+
+            document.querySelectorAll("[data-interactive-table]").forEach(function (table) {
+                const tbody = table.querySelector("tbody");
+                const rows = Array.from(tbody.querySelectorAll("tr"));
+                const headerCells = Array.from(table.querySelectorAll("thead tr:first-child th"));
+                const filterInputs = Array.from(table.querySelectorAll(".column-filter"));
+                let sortState = { index: null, direction: "asc" };
+
+                function applyFiltersAndSort() {
+                    const activeFilters = filterInputs.map(function (input) {
+                        return input.value.trim().toLowerCase();
+                    });
+
+                    const filteredRows = rows.filter(function (row) {
+                        return activeFilters.every(function (filterValue, index) {
+                            if (!filterValue) {
+                                return true;
+                            }
+                            return getCellValue(row, index).toLowerCase().includes(filterValue);
+                        });
+                    });
+
+                    if (sortState.index !== null) {
+                        const sortType = headerCells[sortState.index].dataset.sortType || "text";
+                        filteredRows.sort(function (left, right) {
+                            const leftValue = parseValue(getCellValue(left, sortState.index), sortType);
+                            const rightValue = parseValue(getCellValue(right, sortState.index), sortType);
+                            if (leftValue < rightValue) {
+                                return sortState.direction === "asc" ? -1 : 1;
+                            }
+                            if (leftValue > rightValue) {
+                                return sortState.direction === "asc" ? 1 : -1;
+                            }
+                            return 0;
+                        });
+                    }
+
+                    tbody.innerHTML = "";
+                    filteredRows.forEach(function (row) {
+                        tbody.appendChild(row);
+                    });
+                }
+
+                headerCells.forEach(function (headerCell, index) {
+                    const button = headerCell.querySelector(".sort-button");
+                    if (!button) {
+                        return;
+                    }
+                    button.addEventListener("click", function () {
+                        if (sortState.index === index) {
+                            sortState.direction = sortState.direction === "asc" ? "desc" : "asc";
+                        } else {
+                            sortState.index = index;
+                            sortState.direction = "asc";
+                        }
+                        applyFiltersAndSort();
+                    });
+                });
+
+                filterInputs.forEach(function (input) {
+                    input.addEventListener("input", applyFiltersAndSort);
+                });
+
+                const resetButton = document.querySelector('[data-reset-table="' + table.id + '"]');
+                if (resetButton) {
+                    resetButton.addEventListener("click", function () {
+                        filterInputs.forEach(function (input) {
+                            input.value = "";
+                        });
+                        sortState = { index: null, direction: "asc" };
+                        applyFiltersAndSort();
+                    });
+                }
+            });
+        });
+    </script>
+</body>
+</html>
